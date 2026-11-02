@@ -75,8 +75,12 @@ resource "google_secret_manager_secret_iam_member" "accessor" {
   member    = "serviceAccount:${google_service_account.server.email}"
 }
 
+locals {
+  deploy_service = var.image != "" && var.access_aud != ""
+}
+
 resource "google_cloud_run_v2_service" "server" {
-  count = var.image == "" ? 0 : 1
+  count = local.deploy_service ? 1 : 0
 
   name                = "paprika-mcp"
   location            = var.region
@@ -143,7 +147,7 @@ resource "google_cloud_run_v2_service" "server" {
 
 # Cloudflare can't present Google IAM credentials, and the app enforces Access itself.
 resource "google_cloud_run_v2_service_iam_member" "public_invoker" {
-  count = var.image == "" ? 0 : 1
+  count = local.deploy_service ? 1 : 0
 
   name     = google_cloud_run_v2_service.server[0].name
   location = google_cloud_run_v2_service.server[0].location

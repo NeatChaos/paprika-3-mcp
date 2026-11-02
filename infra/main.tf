@@ -98,6 +98,11 @@ resource "google_cloud_run_v2_service" "server" {
     containers {
       image = var.image
 
+      # The first cache load runs detached from the request, so CPU must stay allocated after the response
+      resources {
+        cpu_idle = false
+      }
+
       ports {
         container_port = 8080
       }

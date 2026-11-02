@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -39,10 +40,12 @@ func (r *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 
 // retryTransport retries requests that fail with a network error, a 429 or a 5xx response.
 // paprikaapp.com drops connections intermittently; sync writes upsert by UID, so replaying a POST is safe.
+// A Retry-After in seconds replaces the backoff; one above maxRetryAfter returns the response at once.
 type retryTransport struct {
 	transport  http.RoundTripper
 	maxRetries int
 	baseDelay  time.Duration
+	sleep      func(ctx context.Context, d time.Duration) error
 }
 
 func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -67,15 +70,23 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		if !retryable || attempt == t.maxRetries {
 			return resp, err
 		}
+		delay := t.baseDelay * (1 << attempt)
+		if requested, ok := retryAfter(resp); ok {
+			if requested > maxRetryAfter {
+				return resp, nil
+			}
+			delay = requested
+		}
 		if resp != nil {
-			_, _ = io.Copy(io.Discard, resp.Body)
-			_ = resp.Body.Close()
+			discard(resp)
 		}
 
-		select {
-		case <-req.Context().Done():
-			return nil, req.Context().Err()
-		case <-time.After(t.baseDelay * (1 << attempt)):
+		sleep := t.sleep
+		if sleep == nil {
+			sleep = sleepContext
+		}
+		if err := sleep(req.Context(), delay); err != nil {
+			return nil, err
 		}
 	}
 }
@@ -85,7 +96,6 @@ func userAgent(version string) string {
 }
 
 func NewClient(username, password, version string, logger *slog.Logger) (*Client, error) {
-	// Create the http client & login to retrieve an authentication token
 	t := &http.Transport{
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			d := &net.Dialer{
@@ -100,41 +110,7 @@ func NewClient(username, password, version string, logger *slog.Logger) (*Client
 		// TLS stack, so requests time out awaiting response headers. TLS 1.2 doesn't have this problem.
 		TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12, MaxVersion: tls.VersionTLS12},
 	}
-	client := &http.Client{
-		Transport: &retryTransport{transport: t, maxRetries: 3, baseDelay: 500 * time.Millisecond},
-		Timeout:   30 * time.Second,
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	token, err := login(ctx, *client, username, password)
-	if err != nil {
-		return nil, fmt.Errorf("failed to login: %w", err)
-	}
-
-	client.Transport = &retryTransport{
-		maxRetries: 3,
-		baseDelay:  500 * time.Millisecond,
-		transport: &roundTripper{
-			transport: t,
-			headers: map[string]string{
-				"Accept":        "*/*",
-				"Authorization": fmt.Sprintf("Bearer %s", token),
-				"Connection":    "keep-alive",
-				"User-Agent":    userAgent(version),
-			},
-		},
-	}
-
-	l := logger
-	if l == nil {
-		l = slog.Default()
-	}
-
-	return &Client{
-		client: client,
-		logger: l,
-	}, nil
+	return newClientWithTransport(username, password, version, logger, t)
 }
 
 type Client struct {
@@ -155,8 +131,8 @@ type errorResponse struct {
 	} `json:"error"`
 }
 
-// login authenticates with the Paprika API and returns an authentication token
-// The token is used for all subsequent requests to the API. As far as I can tell, this is a JWT with no expiration.
+// login authenticates with the Paprika API and returns an authentication token.
+// Errors never include the response body, which may echo credentials.
 func login(ctx context.Context, client http.Client, username, password string) (string, error) {
 	// Credentials must be form-encoded, otherwise passwords containing reserved characters like & + % = get mangled
 	body := url.Values{"email": {username}, "password": {password}}.Encode()
@@ -184,11 +160,11 @@ func login(ctx context.Context, client http.Client, username, password string) (
 
 	var loginResp loginResponse
 	if err := json.Unmarshal(rawBytes, &loginResp); err != nil {
-		return "", err
+		return "", errors.New("failed to parse login response")
 	}
 
 	if loginResp.Result.Token == "" {
-		return "", fmt.Errorf("failed to get token: %s", string(rawBytes))
+		return "", errors.New("login response has no token")
 	}
 
 	return loginResp.Result.Token, nil

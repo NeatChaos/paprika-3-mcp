@@ -70,9 +70,38 @@ func hashInput(r Recipe) ([]byte, error) {
 
 	out := bytes.TrimSuffix(buf.Bytes(), []byte("\n"))
 	out = bytes.ReplaceAll(out, []byte("/"), []byte(`\/`))
-	// encoding/json always escapes these two line separators; NSJSONSerialization does not.
-	for _, sep := range []rune{0x2028, 0x2029} {
-		out = bytes.ReplaceAll(out, fmt.Appendf(nil, `\u%04x`, sep), []byte(string(sep)))
+	return unescapeLineSeparators(out), nil
+}
+
+// unescapeLineSeparators undoes encoding/json's escaping of U+2028 and U+2029, which NSJSONSerialization
+// leaves raw. An escape only starts at a backslash preceded by an even run of backslashes.
+func unescapeLineSeparators(in []byte) []byte {
+	out := make([]byte, 0, len(in))
+	run := 0
+	for i := 0; i < len(in); i++ {
+		if in[i] == '\\' && run%2 == 0 {
+			if sep, ok := lineSeparatorEscape(in[i:]); ok {
+				out = append(out, string(sep)...)
+				i += 5
+				run = 0
+				continue
+			}
+		}
+		out = append(out, in[i])
+		if in[i] == '\\' {
+			run++
+		} else {
+			run = 0
+		}
 	}
-	return out, nil
+	return out
+}
+
+func lineSeparatorEscape(b []byte) (rune, bool) {
+	for _, sep := range []rune{0x2028, 0x2029} {
+		if bytes.HasPrefix(b, fmt.Appendf(nil, `\u%04x`, sep)) {
+			return sep, true
+		}
+	}
+	return 0, false
 }

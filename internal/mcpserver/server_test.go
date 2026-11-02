@@ -85,12 +85,16 @@ func (f *fakeClient) ListMeals(ctx context.Context) (*paprika.MealList, error) {
 func (f *fakeClient) SaveMeal(ctx context.Context, meal paprika.Meal) (*paprika.Meal, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	meal.UID = "NEW-MEAL"
+	if meal.UID == "" {
+		meal.UID = "NEW-MEAL"
+	}
 	f.savedMeals = append(f.savedMeals, meal)
 	return &meal, nil
 }
 
 func strPtr(s string) *string { return &s }
+
+func intPtr(i int) *int { return &i }
 
 // newFakeAccount mirrors the shape of a real account: nested categories and a custom meal type
 func newFakeAccount() *fakeClient {
@@ -110,16 +114,17 @@ func newFakeAccount() *fakeClient {
 			"R5": {UID: "R5", Hash: "h5", Name: "Oude soep", Ingredients: "prei", InTrash: true},
 		},
 		mealTypes: []paprika.MealType{
-			{UID: "T-DINNER", Name: "Dinner", OrderFlag: 2, OriginalType: 2},
-			{UID: "T-LUNCH", Name: "Lunch", OrderFlag: 1, OriginalType: 1},
-			{UID: "T-BREAKFAST", Name: "Breakfast", OrderFlag: 0, OriginalType: 0},
-			{UID: "T-DESSERT", Name: "Nagerecht", OrderFlag: 4, OriginalType: 0},
+			{UID: "T-DINNER", Name: "Dinner", OrderFlag: 2, OriginalType: intPtr(2)},
+			{UID: "T-LUNCH", Name: "Lunch", OrderFlag: 1, OriginalType: intPtr(1)},
+			{UID: "T-BREAKFAST", Name: "Breakfast", OrderFlag: 0, OriginalType: intPtr(0)},
+			{UID: "T-DESSERT", Name: "Nagerecht", OrderFlag: 4, OriginalType: intPtr(0)},
 		},
 		meals: []paprika.Meal{
 			{UID: "M1", RecipeUID: strPtr("R1"), Date: "2025-03-10 00:00:00", Type: 2, TypeUID: "T-DINNER", Name: "Old name"},
 			{UID: "M2", Date: "2025-03-10 00:00:00", Type: 0, TypeUID: "T-BREAKFAST", Name: "Yoghurt"},
 			{UID: "M3", RecipeUID: strPtr("R4"), Date: "2025-03-11 00:00:00", Type: 0, TypeUID: "T-DESSERT", Name: "Crème brûlée"},
 			{UID: "M4", Date: "2025-03-12 00:00:00", Type: 2, TypeUID: "T-DINNER", Name: "Uit eten"},
+			{UID: "M5", Date: "2025-03-10 00:00:00", Type: 1, TypeUID: "T-LUNCH", Name: "Verwijderd", Deleted: true},
 		},
 	}
 }
@@ -227,12 +232,12 @@ func TestListMeals(t *testing.T) {
 	out, isErr := callTool(t, s.listMeals, map[string]interface{}{"start_date": "2025-03-10", "end_date": "2025-03-11"})
 	assert.False(t, isErr)
 	assert.Contains(t, out, "3 meals for 2025-03-10 to 2025-03-11")
-	assert.Contains(t, out, "2025-03-10 (Monday)\n- Breakfast: Yoghurt (free text, no recipe)\n- Dinner: Pasta met prei (recipe uid: R1)\n")
-	assert.Contains(t, out, "2025-03-11 (Tuesday)\n- Nagerecht: Crème brûlée (recipe uid: R4)")
+	assert.Contains(t, out, "2025-03-10 (Monday)\n- Breakfast: Yoghurt (free text, no recipe, meal uid: M2)\n- Dinner: Pasta met prei (recipe uid: R1, meal uid: M1)\n")
+	assert.Contains(t, out, "2025-03-11 (Tuesday)\n- Nagerecht: Crème brûlée (recipe uid: R4, meal uid: M3)")
 	assert.NotContains(t, out, "Uit eten")
 
 	out, _ = callTool(t, s.listMeals, map[string]interface{}{"start_date": "2025-03-12"})
-	assert.Contains(t, out, "- Dinner: Uit eten (free text, no recipe)")
+	assert.Contains(t, out, "- Dinner: Uit eten (free text, no recipe, meal uid: M4)")
 
 	out, _ = callTool(t, s.listMeals, map[string]interface{}{"start_date": "2030-01-01"})
 	assert.Contains(t, out, "No meals planned for 2030-01-01")
@@ -443,4 +448,59 @@ func TestRecipeCacheAbortsWhenThrottled(t *testing.T) {
 	assert.Error(t, err)
 	// Requests stop shortly after maxFetchFailures instead of trying all 55 recipes
 	assert.Less(t, len(client.getCalls), maxFetchFailures+maxConcurrentFetches+1)
+}
+
+func TestListMealsSkipsDeleted(t *testing.T) {
+	s := newTestServer(newFakeAccount())
+
+	out, _ := callTool(t, s.listMeals, map[string]interface{}{"start_date": "2025-03-10"})
+	assert.Contains(t, out, "2 meals for 2025-03-10")
+	assert.NotContains(t, out, "Verwijderd")
+}
+
+func TestListMealsShowsMealUID(t *testing.T) {
+	s := newTestServer(newFakeAccount())
+
+	out, _ := callTool(t, s.listMeals, map[string]interface{}{"start_date": "2025-03-10", "end_date": "2025-03-12"})
+	assert.Contains(t, out, "- Dinner: Pasta met prei (recipe uid: R1, meal uid: M1)")
+	assert.Contains(t, out, "- Breakfast: Yoghurt (free text, no recipe, meal uid: M2)")
+}
+
+func TestRemoveMeal(t *testing.T) {
+	client := newFakeAccount()
+	s := newTestServer(client)
+
+	out, isErr := callTool(t, s.removeMeal, map[string]interface{}{"uid": "M1"})
+	assert.False(t, isErr, out)
+	assert.Contains(t, out, "M1")
+
+	require.Len(t, client.savedMeals, 1)
+	want := client.meals[0]
+	want.Deleted = true
+	assert.Equal(t, want, client.savedMeals[0])
+	assert.Equal(t, "Old name", client.savedMeals[0].Name)
+	assert.Equal(t, "R1", *client.savedMeals[0].RecipeUID)
+}
+
+func TestRemoveMealUnknownOrDeleted(t *testing.T) {
+	for _, uid := range []string{"NOPE", "M5", ""} {
+		client := newFakeAccount()
+		s := newTestServer(client)
+
+		_, isErr := callTool(t, s.removeMeal, map[string]interface{}{"uid": uid})
+		assert.True(t, isErr, uid)
+		assert.Empty(t, client.savedMeals, uid)
+	}
+}
+
+func TestAddMealCustomTypeWithoutOriginalType(t *testing.T) {
+	client := newFakeAccount()
+	client.mealTypes = append(client.mealTypes, paprika.MealType{UID: "T-BRUNCH", Name: "Brunch", OrderFlag: 5})
+	s := newTestServer(client)
+
+	_, isErr := callTool(t, s.addMeal, map[string]interface{}{"date": "2025-04-01", "meal_type": "brunch", "name": "Pannenkoeken"})
+	assert.False(t, isErr)
+	require.Len(t, client.savedMeals, 1)
+	assert.Equal(t, "T-BRUNCH", client.savedMeals[0].TypeUID)
+	assert.Equal(t, 0, client.savedMeals[0].Type)
 }

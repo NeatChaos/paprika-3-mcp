@@ -251,7 +251,8 @@ func TestListCategoriesAndMealTypes(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, mealTypes.Result, 1)
 	assert.Equal(t, "Nagerecht", mealTypes.Result[0].Name)
-	assert.Equal(t, 0, mealTypes.Result[0].OriginalType)
+	require.NotNil(t, mealTypes.Result[0].OriginalType)
+	assert.Equal(t, 0, *mealTypes.Result[0].OriginalType)
 }
 
 func TestSaveMeal(t *testing.T) {
@@ -277,6 +278,25 @@ func TestSaveMeal(t *testing.T) {
 	assert.Equal(t, "T2", sent[0]["type_uid"])
 	assert.Equal(t, float64(2), sent[0]["type"])
 	assert.Contains(t, sent[0], "scale")
+}
+
+func TestSaveMealWireShape(t *testing.T) {
+	httpClient, requests := fakePaprika(t, okHandler)
+	client := newFakeClient(httpClient)
+
+	_, err := client.SaveMeal(context.Background(), Meal{UID: "M1", Date: "2025-01-01 00:00:00", Name: "Pizza", Deleted: true})
+	require.NoError(t, err)
+
+	var sent []map[string]interface{}
+	require.NoError(t, json.Unmarshal(decodeUpload(t, requests()[0]), &sent))
+	require.Len(t, sent, 1)
+	keys := make([]string, 0, len(sent[0]))
+	for k := range sent[0] {
+		keys = append(keys, k)
+	}
+	assert.ElementsMatch(t, []string{"uid", "recipe_uid", "name", "date", "type", "type_uid", "order_flag", "deleted", "scale", "is_ingredient"}, keys)
+	assert.Equal(t, true, sent[0]["deleted"])
+	assert.Nil(t, sent[0]["recipe_uid"])
 }
 
 func TestRetryTransport(t *testing.T) {

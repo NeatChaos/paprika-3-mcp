@@ -160,6 +160,35 @@ func TestSaveRecipe(t *testing.T) {
 		assert.Equal(t, "Soup", fields["name"])
 	})
 
+	t.Run("upload has the app's write shape and Paprika's hash", func(t *testing.T) {
+		httpClient, requests := fakePaprika(t, okHandler)
+		client := newFakeClient(httpClient)
+
+		photoURL := "https://example.com/signed.jpg"
+		saved, err := client.SaveRecipe(context.Background(), Recipe{Name: "Soup", Hash: "STALE", PhotoURL: &photoURL, OnGroceryList: true})
+		require.NoError(t, err)
+		assert.Equal(t, &photoURL, saved.PhotoURL)
+
+		upload := decodeUpload(t, requests()[0])
+		var fields map[string]interface{}
+		require.NoError(t, json.Unmarshal(upload, &fields))
+
+		var wireFields map[string]interface{}
+		require.NoError(t, json.Unmarshal(readWireFixture(t), &wireFields))
+		assert.ElementsMatch(t, keysOf(wireFields), keysOf(fields))
+		for _, key := range []string{"image_url", "photo", "photo_hash", "photo_large", "scale"} {
+			assert.Contains(t, fields, key)
+			assert.Nil(t, fields[key], key)
+		}
+
+		var uploaded Recipe
+		require.NoError(t, json.Unmarshal(upload, &uploaded))
+		want, err := uploaded.ComputeHash()
+		require.NoError(t, err)
+		assert.Equal(t, want, fields["hash"])
+		assert.Equal(t, want, saved.Hash)
+	})
+
 	t.Run("existing created timestamp is kept", func(t *testing.T) {
 		httpClient, _ := fakePaprika(t, okHandler)
 		client := newFakeClient(httpClient)
@@ -303,4 +332,12 @@ func TestRetryTransport(t *testing.T) {
 func TestToMarkdownNumbersDirectionSteps(t *testing.T) {
 	r := Recipe{Name: "Soup", Directions: "Chop.\n\nBoil.\n \nServe."}
 	assert.Contains(t, r.ToMarkdown(), "## Directions\n1. Chop.\n2. Boil.\n3. Serve.\n")
+}
+
+func keysOf(m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }

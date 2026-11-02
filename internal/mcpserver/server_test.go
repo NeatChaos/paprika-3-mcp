@@ -336,7 +336,8 @@ func TestUpdateRecipeKeepsExistingFields(t *testing.T) {
 	client := newFakeAccount()
 	r := client.recipes["R1"]
 	r.Rating = 5
-	r.Photo = "photo.jpg"
+	photo := "photo.jpg"
+	r.Photo = &photo
 	r.Created = "2020-01-01 10:00:00"
 	client.recipes["R1"] = r
 	s := newTestServer(client)
@@ -350,7 +351,7 @@ func TestUpdateRecipeKeepsExistingFields(t *testing.T) {
 	assert.Equal(t, "Pasta met prei", saved.Name)
 	assert.Equal(t, []string{"C-PASTA", "C-VEGA"}, saved.Categories)
 	assert.Equal(t, 5, saved.Rating)
-	assert.Equal(t, "photo.jpg", saved.Photo)
+	assert.Equal(t, &photo, saved.Photo)
 	assert.Equal(t, "2020-01-01 10:00:00", saved.Created)
 }
 

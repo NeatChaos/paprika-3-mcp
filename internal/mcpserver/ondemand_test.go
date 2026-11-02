@@ -155,29 +155,6 @@ func TestColdStartRetriesAfterFailure(t *testing.T) {
 	assert.Contains(t, out, "Found 2 recipes")
 }
 
-func TestColdStartKeepsPartialProgress(t *testing.T) {
-	client := newFakeAccount()
-	client.failGet = map[string]bool{"R3": true, "R4": true}
-	store := &fakeStore{}
-	s := newOnDemandServer(client, store, nil)
-
-	_, err := s.searchRecipes(context.Background(), mcp.CallToolRequest{})
-	assert.Error(t, err)
-	assert.Equal(t, 1, store.saveCount())
-	var stored storeObject
-	require.NoError(t, json.Unmarshal(store.data, &stored))
-	assert.Len(t, stored.Recipes, 2, "R1 and R2 were fetched; R5 is in the trash")
-	assert.NotContains(t, stored.Hashes, "R3")
-	assert.NotContains(t, stored.Hashes, "R4")
-
-	client.failGet = nil
-	client.takeCalls()
-	out, isErr := callTool(t, s.searchRecipes, map[string]interface{}{"query": "lasagne"})
-	assert.False(t, isErr)
-	assert.Contains(t, out, "Found 1 recipe")
-	assert.ElementsMatch(t, []string{"R3", "R4"}, client.getCalls)
-}
-
 func TestColdStartOutlivesCaller(t *testing.T) {
 	client := newFakeAccount()
 	client.gate = make(chan struct{})

@@ -1,5 +1,4 @@
 project_id         = "<project-id>"
 allowed_emails     = ["you@example.com"]
 access_team_domain = "https://<team>.cloudflareaccess.com"
-# access_aud = ""   # AUD tag of the Cloudflare Access application
-# image      = ""   # <artifact_repo>/server@sha256:...; the service needs both image and access_aud
+access_aud         = "" # AUD tag of the Cloudflare Access application; the service needs it

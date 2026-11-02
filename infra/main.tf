@@ -76,7 +76,16 @@ resource "google_secret_manager_secret_iam_member" "accessor" {
 }
 
 locals {
-  deploy_service = var.image != "" && var.access_aud != ""
+  deploy_service = var.access_aud != ""
+  image          = var.image != "" ? var.image : one(data.google_cloud_run_v2_service.live[*].template[0].containers[0].image)
+}
+
+# Empty var.image keeps the live image so plans show no image churn; the deploy workflow always passes one
+data "google_cloud_run_v2_service" "live" {
+  count = local.deploy_service && var.image == "" ? 1 : 0
+
+  name     = "paprika-mcp"
+  location = var.region
 }
 
 resource "google_cloud_run_v2_service" "server" {
@@ -96,7 +105,7 @@ resource "google_cloud_run_v2_service" "server" {
     }
 
     containers {
-      image = var.image
+      image = local.image
 
       # The first cache load runs detached from the request, so CPU must stay allocated after the response
       resources {

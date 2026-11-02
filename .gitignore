@@ -29,6 +29,8 @@ go.work.sum
 
 # terraform
 infra/.terraform/
+infra/bootstrap/.terraform/
 infra/*.tfvars
 infra/worker/wrangler.toml
 !infra/terraform.tfvars.example
+.wrangler/

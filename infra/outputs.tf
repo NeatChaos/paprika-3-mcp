@@ -1,5 +1,5 @@
 output "run_url" {
-  description = "run.app URL of the service; null until the service is deployed (image and access_aud set)."
+  description = "run.app URL of the service; null until the service is deployed (access_aud set)."
   value       = one(google_cloud_run_v2_service.server[*].uri)
 }
 

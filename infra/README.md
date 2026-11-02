@@ -20,7 +20,7 @@ GOOGLE_OAUTH_ACCESS_TOKEN="$(gcloud auth print-access-token --configuration=papr
 GOOGLE_OAUTH_ACCESS_TOKEN="$(gcloud auth print-access-token --configuration=paprika-mcp)" terraform -chdir=infra apply
 ```
 
-With `image` empty (the default) no Cloud Run service is created. Expected result: the repository, bucket, service account, and the two secrets (`paprika-username`, `paprika-password`) with no versions.
+With `image` or `access_aud` empty (the default) no Cloud Run service is created. Expected result: the repository, bucket, service account, and the two secrets (`paprika-username`, `paprika-password`) with no versions.
 
 ## 3. Add secret versions (owner)
 
@@ -33,7 +33,11 @@ make image TAG=<tag>                 # registry comes from `terraform -chdir=inf
 make image TAG=<tag> REGISTRY=<repo> # or pass the registry explicitly
 ```
 
-`make image` builds for linux/amd64, pushes, and prints the `repo/server@sha256:...` reference. Put that in `image` in `terraform.tfvars` and apply to create the service. After the Cloudflare Access application exists, set `access_aud` and apply again.
+`make image` builds for linux/amd64, pushes, and prints the `repo/server@sha256:...` reference. The server exits at startup without `ACCESS_AUD`, so Terraform creates the service only when both `image` and `access_aud` are set. In order:
+
+1. In the Cloudflare dashboard, create the Access application for the hostname and copy its AUD tag.
+1. Set `access_aud` to that tag and `image` to the reference above in `terraform.tfvars`. `access_team_domain` is the full issuer URL, `https://<team>.cloudflareaccess.com`.
+1. Apply. This creates the Cloud Run service.
 
 ## 5. Cloudflare Worker proxy
 

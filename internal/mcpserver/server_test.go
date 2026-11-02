@@ -479,7 +479,8 @@ func TestRecipeCacheAbortsWhenThrottled(t *testing.T) {
 	_, err := cache.refresh(context.Background(), 0)
 	assert.Error(t, err)
 	// Requests stop shortly after maxFetchFailures instead of trying all 55 recipes
-	assert.Less(t, len(client.getCalls), maxFetchFailures+maxConcurrentFetches+1)
+	// Worst case: every healthy recipe succeeds before the threshold, plus the failures and the other in-flight workers
+	assert.LessOrEqual(t, len(client.getCalls), 5+maxFetchFailures+maxConcurrentFetches-1)
 }
 
 func TestListMealsSkipsDeleted(t *testing.T) {

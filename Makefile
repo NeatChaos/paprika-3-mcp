@@ -1,8 +1,10 @@
 .PHONY: build install image
 
 TAG ?= dev
+ifeq ($(MAKECMDGOALS),image)
 ifndef REGISTRY
 REGISTRY := $(shell terraform -chdir=infra output -raw artifact_repo 2>/dev/null)
+endif
 endif
 
 build:

@@ -31,8 +31,8 @@ type NewServerOptions struct {
 }
 
 func NewServer(opts NewServerOptions) (*Server, error) {
-	if opts.Store != nil && !opts.OnDemandRefresh {
-		return nil, errors.New("a cache store requires OnDemandRefresh")
+	if err := validateOptions(opts); err != nil {
+		return nil, err
 	}
 
 	paprika3, err := paprika.NewClient(opts.Username, opts.Password, opts.Version, opts.Logger)
@@ -45,6 +45,13 @@ func NewServer(opts NewServerOptions) (*Server, error) {
 		s.cache.enableOnDemand(opts.Store)
 	}
 	return s, nil
+}
+
+func validateOptions(opts NewServerOptions) error {
+	if opts.Store != nil && !opts.OnDemandRefresh {
+		return errors.New("a cache store requires OnDemandRefresh")
+	}
+	return nil
 }
 
 func newServer(client paprikaClient, version string, logger *slog.Logger, cachePath string) *Server {

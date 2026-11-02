@@ -102,6 +102,8 @@ func (c *recipeCache) loadAndSync(ctx context.Context) error {
 		loaded := c.loaded
 		c.mu.RUnlock()
 		if !loaded {
+			// Keep what was fetched so the retry only fetches the rest
+			c.saveStore(ctx)
 			return err
 		}
 		c.logger.Warn("using partly stale recipe cache", "err", err)

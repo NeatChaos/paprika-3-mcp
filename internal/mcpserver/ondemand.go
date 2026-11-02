@@ -28,7 +28,7 @@ const (
 
 const (
 	refreshToolDescription = "Reload recipes, categories and the meal plan from Paprika. Use when the user says they changed something in the Paprika app during this conversation."
-	conflictMessage        = "This recipe was changed in Paprika since it was loaded. The latest version is now loaded; read it with get_recipe and retry the update."
+	conflictMessage        = "This recipe was changed in Paprika since it was loaded. The latest version is now loaded; read it with get_recipe and retry."
 	mealConflictMessage    = "This meal was changed in Paprika since it was loaded. The meal plan is now reloaded; check it with list_meals and retry."
 )
 

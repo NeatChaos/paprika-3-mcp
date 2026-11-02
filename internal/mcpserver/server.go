@@ -11,6 +11,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+	"github.com/soggycactus/paprika-3-mcp/internal/cachestore"
 	"github.com/soggycactus/paprika-3-mcp/internal/paprika"
 )
 
@@ -22,15 +23,28 @@ type NewServerOptions struct {
 	Logger   *slog.Logger
 	// CachePath is where the recipe cache is stored between runs; empty keeps it in memory only
 	CachePath string
+	// Store persists the recipe cache; it requires OnDemandRefresh
+	Store cachestore.Store
+	// OnDemandRefresh loads the cache once, on the first tool call, and then serves reads from memory.
+	// Paprika is only read again by refresh_paprika and by conflict checks before writes.
+	OnDemandRefresh bool
 }
 
 func NewServer(opts NewServerOptions) (*Server, error) {
+	if opts.Store != nil && !opts.OnDemandRefresh {
+		return nil, errors.New("a cache store requires OnDemandRefresh")
+	}
+
 	paprika3, err := paprika.NewClient(opts.Username, opts.Password, opts.Version, opts.Logger)
 	if err != nil {
 		return nil, err
 	}
 
-	return newServer(paprika3, opts.Version, opts.Logger, opts.CachePath), nil
+	s := newServer(paprika3, opts.Version, opts.Logger, opts.CachePath)
+	if opts.OnDemandRefresh {
+		s.cache.enableOnDemand(opts.Store)
+	}
+	return s, nil
 }
 
 func newServer(client paprikaClient, version string, logger *slog.Logger, cachePath string) *Server {
@@ -62,7 +76,9 @@ const (
 
 // Start serves MCP over stdio
 func (s *Server) Start() {
-	go s.updateResources()
+	if !s.cache.onDemand {
+		go s.updateResources()
+	}
 
 	s.server.AddTools(s.tools()...)
 
@@ -74,7 +90,9 @@ func (s *Server) Start() {
 // HTTPHandler serves MCP over streamable HTTP, for hosting the server remotely.
 // It is stateless, so every request can land on a different instance. The caller is responsible for authentication.
 func (s *Server) HTTPHandler() http.Handler {
-	go s.updateResources()
+	if !s.cache.onDemand {
+		go s.updateResources()
+	}
 
 	s.server.AddTools(s.tools()...)
 
@@ -148,7 +166,7 @@ func (s *Server) tools() []server.ServerTool {
 		mcp.WithString("uid", mcp.Description("The meal uid shown by list_meals"), mcp.Required()),
 	)
 
-	return []server.ServerTool{
+	tools := []server.ServerTool{
 		{Tool: createRecipeTool, Handler: s.createRecipe},
 		{Tool: updateRecipeTool, Handler: s.updateRecipe},
 		{Tool: searchRecipesTool, Handler: s.searchRecipes},
@@ -158,6 +176,10 @@ func (s *Server) tools() []server.ServerTool {
 		{Tool: addMealTool, Handler: s.addMeal},
 		{Tool: removeMealTool, Handler: s.removeMeal},
 	}
+	if s.cache.onDemand {
+		tools = append(tools, s.refreshTool())
+	}
+	return tools
 }
 
 // updateResources keeps the recipe cache in sync and exposes new or changed recipes as MCP resources
@@ -248,7 +270,7 @@ func (s *Server) createRecipe(ctx context.Context, req mcp.CallToolRequest) (*mc
 	_, categories := s.cache.snapshot()
 	categoryUIDs, err := newCategoryIndex(categories).resolveCategories(stringSliceArg(args, "categories"))
 	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+		return s.categoryError(err), nil
 	}
 
 	ctx, cancel = context.WithTimeout(ctx, writeTimeout)
@@ -271,6 +293,7 @@ func (s *Server) createRecipe(ctx context.Context, req mcp.CallToolRequest) (*mc
 		return nil, err
 	}
 	s.cache.put(*recipe)
+	s.cache.saveStore(ctx)
 
 	duration := time.Since(start)
 	s.logger.Info("Created recipe", "name", recipe.Name, "uid", recipe.UID, "duration", duration)
@@ -300,6 +323,11 @@ func (s *Server) updateRecipe(ctx context.Context, req mcp.CallToolRequest) (*mc
 	if err != nil {
 		return nil, err
 	}
+	if s.cache.onDemand {
+		if result, err := s.checkRecipeConflict(ctx, *recipe); result != nil || err != nil {
+			return result, err
+		}
+	}
 
 	fields := map[string]*string{
 		"name":        &recipe.Name,
@@ -325,7 +353,7 @@ func (s *Server) updateRecipe(ctx context.Context, req mcp.CallToolRequest) (*mc
 	if _, ok := args["categories"]; ok {
 		categoryUIDs, err := newCategoryIndex(categories).resolveCategories(stringSliceArg(args, "categories"))
 		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
+			return s.categoryError(err), nil
 		}
 		recipe.Categories = categoryUIDs
 	}
@@ -335,6 +363,7 @@ func (s *Server) updateRecipe(ctx context.Context, req mcp.CallToolRequest) (*mc
 		return nil, err
 	}
 	s.cache.put(*recipe)
+	s.cache.saveStore(ctx)
 
 	duration := time.Since(start)
 	s.logger.Info("Updated recipe", "name", recipe.Name, "uid", recipe.UID, "duration", duration)

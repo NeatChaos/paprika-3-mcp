@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/soggycactus/paprika-3-mcp/internal/cachestore"
 	"github.com/soggycactus/paprika-3-mcp/internal/paprika"
 )
 
@@ -48,6 +49,22 @@ type recipeCache struct {
 	categories  []paprika.Category
 	lastRefresh time.Time
 	loaded      bool
+
+	// onDemand replaces per-call refreshes with one cold-start load; refreshes then only happen
+	// when asked for. See ondemand.go.
+	onDemand bool
+	store    cachestore.Store
+	// loadMu guards loading and coldLoaded
+	loadMu     sync.Mutex
+	loading    *loadAttempt
+	coldLoaded bool
+	// saveMu serializes store saves and guards generation and saved
+	saveMu     sync.Mutex
+	generation int64
+	saved      []byte
+	// mealTypes and meals are only kept in onDemand mode; meals are never persisted
+	mealTypes []paprika.MealType
+	meals     []paprika.Meal
 }
 
 func newRecipeCache(client paprikaClient, logger *slog.Logger, path string) *recipeCache {
@@ -116,6 +133,10 @@ func (c *recipeCache) save() {
 // ensureFresh refreshes the cache if it is older than maxAge. Once the cache has been loaded,
 // a failed refresh is logged and the stale data is used instead.
 func (c *recipeCache) ensureFresh(ctx context.Context, maxAge time.Duration) error {
+	if c.onDemand {
+		return c.ensureLoaded(ctx)
+	}
+
 	c.mu.RLock()
 	fresh := c.loaded && time.Since(c.lastRefresh) < maxAge
 	c.mu.RUnlock()

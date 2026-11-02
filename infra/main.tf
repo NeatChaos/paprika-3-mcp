@@ -14,6 +14,16 @@ resource "google_artifact_registry_repository" "images" {
   location      = var.region
   format        = "DOCKER"
 
+  cleanup_policy_dry_run = false
+
+  cleanup_policies {
+    id     = "delete-old"
+    action = "DELETE"
+    condition {
+      tag_state = "ANY"
+    }
+  }
+
   cleanup_policies {
     id     = "keep-newest-5"
     action = "KEEP"

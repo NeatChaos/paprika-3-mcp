@@ -2,7 +2,7 @@
 //
 // Configuration comes from environment variables:
 //   - PAPRIKA_USERNAME and PAPRIKA_PASSWORD: the Paprika 3 account
-//   - PORT: the port to listen on (default 8080)
+//   - PORT: the port to listen on (default 3000)
 //
 // Access mode (Cloud Run behind Cloudflare Access), selected by a non-empty ACCESS_AUD:
 //   - ACCESS_AUD: the Access application audience tag
@@ -38,7 +38,7 @@ var version = "dev" // set during build with -ldflags
 
 const (
 	minSecretLength = 32
-	defaultPort     = "8080"
+	defaultPort     = "3000"
 	cacheObject     = "recipe-cache.json"
 )
 
@@ -150,7 +150,8 @@ func main() {
 		hc := &http.Client{Timeout: 30 * time.Second}
 		opts.Store = cachestore.NewGCS(cfg.cacheBucket, cacheObject, hc, cachestore.DefaultEndpoint, cachestore.MetadataToken(hc))
 		opts.OnDemandRefresh = true
-		keySet = oidc.NewRemoteKeySet(context.Background(), cfg.access.teamDomain+"/cdn-cgi/access/certs")
+		jwksCtx := oidc.ClientContext(context.Background(), &http.Client{Timeout: 10 * time.Second})
+		keySet = oidc.NewRemoteKeySet(jwksCtx, cfg.access.teamDomain+"/cdn-cgi/access/certs")
 	} else {
 		// Recipes only, never credentials. Serverless instances only have a writable temp dir.
 		opts.CachePath = filepath.Join(os.TempDir(), "paprika-3-mcp", "recipes.json")

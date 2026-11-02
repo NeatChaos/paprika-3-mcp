@@ -166,11 +166,11 @@ The recipe cache lives in memory and in the instance's temp dir, so the first se
 | `ACCESS_TEAM_DOMAIN` | `https://<team>.cloudflareaccess.com` |
 | `ALLOWED_EMAILS` | Comma-separated emails admitted on `/mcp` |
 | `CACHE_BUCKET` | GCS bucket for the recipe cache |
-| `PORT` | Listen port (default 8080; Cloud Run sets it) |
+| `PORT` | Listen port (default 3000; the Dockerfile and Cloud Run set it) |
 
 Startup fails, naming the variable, if any required one is missing or invalid. Provisioning, deploying, and the Cloudflare Worker are covered in [`infra/README.md`](infra/README.md).
 
-After deploying, check that nothing reaches the app unauthenticated (neither request calls Paprika):
+After deploying, check that nothing reaches the app unauthenticated (a cold instance logs in to Paprika at container start, but neither request makes a Paprika call):
 
 ```sh
 curl -si "$(terraform -chdir=infra output -raw run_url)/mcp" | head -n 1                 # expect HTTP/2 401

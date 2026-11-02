@@ -155,6 +155,28 @@ The server only answers on `https://<your-project>.vercel.app/mcp/<MCP_SECRET>`;
 
 The recipe cache lives in memory and in the instance's temp dir, so the first search after a cold start fetches all recipes again (about 30 seconds for 600 recipes).
 
+## ☁️ Cloud Run + Cloudflare Access
+
+`cmd/server` also runs on Cloud Run behind Cloudflare Access. Setting `ACCESS_AUD` selects this mode: `/mcp` requires a valid `Cf-Access-Jwt-Assertion` JWT from an allowlisted email, and `MCP_SECRET` is ignored. The recipe cache lives in a GCS bucket, so it survives cold starts.
+
+| Variable | Value |
+| --- | --- |
+| `PAPRIKA_USERNAME`, `PAPRIKA_PASSWORD` | The Paprika 3 account (from Secret Manager on Cloud Run) |
+| `ACCESS_AUD` | The Access application's audience tag |
+| `ACCESS_TEAM_DOMAIN` | `https://<team>.cloudflareaccess.com` |
+| `ALLOWED_EMAILS` | Comma-separated emails admitted on `/mcp` |
+| `CACHE_BUCKET` | GCS bucket for the recipe cache |
+| `PORT` | Listen port (default 8080; Cloud Run sets it) |
+
+Startup fails, naming the variable, if any required one is missing or invalid. Provisioning, deploying, and the Cloudflare Worker are covered in [`infra/README.md`](infra/README.md).
+
+After deploying, check that nothing reaches the app unauthenticated (neither request calls Paprika):
+
+```sh
+curl -si "$(terraform -chdir=infra output -raw run_url)/mcp" | head -n 1                 # expect HTTP/2 401
+curl -si https://<hostname>/mcp | rg -i '^(HTTP|www-authenticate)'                      # expect 401 from Access with WWW-Authenticate
+```
+
 ## 🙏 Acknowledgements
 
 This fork builds on fixes and research from the community: login encoding (#8), empty categories (#12), and the bulk meal endpoint and retry approach from [JoshTerAvest](https://github.com/JoshTerAvest/paprika-3-mcp) (#11). Meal types via `/sync/mealtypes` were inspired by [brendanjerwin's fork](https://github.com/brendanjerwin/paprika-3-mcp).

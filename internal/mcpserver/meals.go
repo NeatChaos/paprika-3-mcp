@@ -34,11 +34,7 @@ func (s *Server) listMeals(ctx context.Context, req mcp.CallToolRequest) (*mcp.C
 
 	ctx, cancel := context.WithTimeout(ctx, readTimeout)
 	defer cancel()
-	meals, err := s.paprika3.ListMeals(ctx)
-	if err != nil {
-		return nil, err
-	}
-	mealTypes, err := s.paprika3.ListMealTypes(ctx)
+	meals, mealTypes, err := s.mealPlan(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +44,7 @@ func (s *Server) listMeals(ctx context.Context, req mcp.CallToolRequest) (*mcp.C
 	}
 	recipes, _ := s.cache.snapshot()
 
-	return mcp.NewToolResultText(formatMeals(meals.Result, mealTypes.Result, recipes, startDate, endDate)), nil
+	return mcp.NewToolResultText(formatMeals(meals, mealTypes, recipes, startDate, endDate)), nil
 }
 
 // formatMeals renders the meals between start and end (inclusive) grouped per day, in meal type order
@@ -155,11 +151,11 @@ func (s *Server) addMeal(ctx context.Context, req mcp.CallToolRequest) (*mcp.Cal
 
 	readCtx, cancel := context.WithTimeout(ctx, readTimeout)
 	defer cancel()
-	mealTypes, err := s.paprika3.ListMealTypes(readCtx)
+	mealTypes, err := s.mealTypes(readCtx)
 	if err != nil {
 		return nil, err
 	}
-	mealType, err := resolveMealType(mealTypes.Result, mealTypeName)
+	mealType, err := resolveMealType(mealTypes, mealTypeName)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -189,6 +185,7 @@ func (s *Server) addMeal(ctx context.Context, req mcp.CallToolRequest) (*mcp.Cal
 	if err != nil {
 		return nil, err
 	}
+	s.cache.upsertMeal(*saved)
 
 	s.logger.Info("Added meal", "name", saved.Name, "uid", saved.UID, "date", saved.Date, "type", mealType.Name, "duration", time.Since(start))
 
@@ -221,6 +218,9 @@ func (s *Server) removeMeal(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 	if err != nil {
 		return nil, err
 	}
+	if s.cache.onDemand && !s.cache.mealUnchanged(uid, meals.Result) {
+		return mcp.NewToolResultError(mealConflictMessage), nil
+	}
 	var meal *paprika.Meal
 	for i := range meals.Result {
 		if meals.Result[i].UID == uid && !meals.Result[i].Deleted {
@@ -236,6 +236,7 @@ func (s *Server) removeMeal(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 	if _, err := s.paprika3.SaveMeal(ctx, *meal); err != nil {
 		return nil, err
 	}
+	s.cache.upsertMeal(*meal)
 
 	s.logger.Info("Removed meal", "name", meal.Name, "uid", meal.UID, "date", meal.Date, "duration", time.Since(start))
 	return mcp.NewToolResultText(fmt.Sprintf("Removed %q from %s. Meal uid: %s", meal.Name, meal.Date[:len(dateLayout)], meal.UID)), nil

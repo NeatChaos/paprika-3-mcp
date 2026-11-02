@@ -212,6 +212,15 @@ func (s *Server) removeMeal(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 		return mcp.NewToolResultError("uid is required (see list_meals)"), nil
 	}
 
+	// The conflict check compares against the cached meal plan, so it must be loaded first
+	if s.cache.onDemand {
+		readCtx, cancel := context.WithTimeout(ctx, readTimeout)
+		defer cancel()
+		if err := s.cache.ensureLoaded(readCtx); err != nil {
+			return nil, err
+		}
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, writeTimeout)
 	defer cancel()
 	meals, err := s.paprika3.ListMeals(ctx)

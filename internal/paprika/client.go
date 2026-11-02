@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/sha256"
 	"crypto/tls"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,7 +14,6 @@ import (
 	"net/http"
 	"net/url"
 	"runtime"
-	"sort"
 	"strings"
 	"time"
 
@@ -256,20 +253,21 @@ type Recipe struct {
 	TotalTime       string   `json:"total_time"`
 	Source          string   `json:"source"`
 	SourceURL       string   `json:"source_url"`
-	ImageURL        string   `json:"image_url"`
-	Photo           string   `json:"photo"`
-	PhotoHash       string   `json:"photo_hash"`
-	PhotoLarge      string   `json:"photo_large"`
-	Scale           string   `json:"scale"`
+	ImageURL        *string  `json:"image_url"`
+	Photo           *string  `json:"photo"`
+	PhotoHash       *string  `json:"photo_hash"`
+	PhotoLarge      *string  `json:"photo_large"`
+	Scale           *string  `json:"scale"`
 	Hash            string   `json:"hash"`
 	Categories      []string `json:"categories"`
 	Rating          int      `json:"rating"`
 	InTrash         bool     `json:"in_trash"`
+	Deleted         bool     `json:"deleted"`
 	IsPinned        bool     `json:"is_pinned"`
 	OnFavorites     bool     `json:"on_favorites"`
-	OnGroceryList   bool     `json:"on_grocery_list"`
+	OnGroceryList   bool     `json:"on_grocery_list,omitempty"`
 	Created         string   `json:"created"`
-	PhotoURL        string   `json:"photo_url"`
+	PhotoURL        *string  `json:"photo_url,omitempty"`
 }
 
 func (r *Recipe) ResourceDescription() string {
@@ -356,53 +354,6 @@ func (r *Recipe) updateCreated() {
 	r.Created = time.Now().Format(layout)
 }
 
-func (r *Recipe) asMap() (map[string]interface{}, error) {
-	data, err := json.Marshal(r)
-	if err != nil {
-		return nil, err
-	}
-
-	var fields map[string]interface{}
-	if err := json.Unmarshal(data, &fields); err != nil {
-		return nil, err
-	}
-
-	return fields, nil
-}
-
-func (r *Recipe) updateHash() error {
-	fields, err := r.asMap()
-	if err != nil {
-		return err
-	}
-
-	// Remove the "hash" field
-	delete(fields, "hash")
-
-	// Sort keys manually to ensure consistent JSON output
-	keys := make([]string, 0, len(fields))
-	for k := range fields {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	// Build a sorted map for consistent hashing
-	sorted := make(map[string]interface{}, len(fields))
-	for _, k := range keys {
-		sorted[k] = fields[k]
-	}
-
-	// Marshal the sorted map to JSON
-	jsonBytes, err := json.Marshal(sorted)
-	if err != nil {
-		return err
-	}
-
-	hash := sha256.Sum256(jsonBytes)
-	r.Hash = hex.EncodeToString(hash[:])
-	return nil
-}
-
 func gzipJSON(v interface{}) ([]byte, error) {
 	jsonBytes, err := json.Marshal(v)
 	if err != nil {
@@ -481,12 +432,17 @@ func (c *Client) SaveRecipe(ctx context.Context, recipe Recipe) (*Recipe, error)
 	recipe.updateCreated()
 	// generate a new UUID if one doesn't exist
 	recipe.generateUUID()
-	// generate a hash of the recipe object
-	if err := recipe.updateHash(); err != nil {
+	hash, err := recipe.ComputeHash()
+	if err != nil {
 		return nil, err
 	}
+	recipe.Hash = hash
 
-	if err := c.postV2(ctx, fmt.Sprintf("https://paprikaapp.com/api/v2/sync/recipe/%s/", recipe.UID), &recipe); err != nil {
+	// on_grocery_list and photo_url are computed by the server; the apps never send them.
+	upload := recipe
+	upload.OnGroceryList = false
+	upload.PhotoURL = nil
+	if err := c.postV2(ctx, fmt.Sprintf("https://paprikaapp.com/api/v2/sync/recipe/%s/", recipe.UID), &upload); err != nil {
 		c.logger.Error("failed to save recipe", "error", err)
 		return nil, fmt.Errorf("failed to save recipe: %w", err)
 	}

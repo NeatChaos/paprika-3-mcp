@@ -26,3 +26,8 @@ go.work.sum
 .env
 .vercel
 .env*
+
+# terraform
+infra/.terraform/
+infra/*.tfvars
+!infra/terraform.tfvars.example

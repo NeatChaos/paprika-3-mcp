@@ -22,3 +22,24 @@ jobs:
       - name: Test
         run: go test -race ./...
       - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+      - uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6.3.2
+      - name: fmt
+        run: terraform fmt -check -recursive infra
+      - name: init
+        run: terraform -chdir=infra init -backend=false
+      - name: validate
+        run: terraform -chdir=infra validate
+      - name: tflint
+        run: |
+          tflint --chdir=infra --init
+          tflint --chdir=infra
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

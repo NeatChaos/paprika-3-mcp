@@ -1,0 +1,5 @@
+project_id         = "<project-id>"
+allowed_emails     = ["you@example.com"]
+access_team_domain = "<team>.cloudflareaccess.com"
+# access_aud = ""   # set after the Cloudflare Access application exists
+# image      = ""   # set to <artifact_repo>/server@sha256:... to create the service

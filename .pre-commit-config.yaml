@@ -13,3 +13,15 @@ repos:
         language: system
         pass_filenames: false
         types: [go]
+      - id: terraform-fmt
+        name: terraform fmt
+        entry: terraform fmt -check -recursive infra
+        language: system
+        pass_filenames: false
+        files: \.tf$
+      - id: tflint
+        name: tflint
+        entry: tflint --chdir=infra
+        language: system
+        pass_filenames: false
+        files: \.(tf|hcl)$

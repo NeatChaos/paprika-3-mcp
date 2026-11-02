@@ -18,3 +18,21 @@ updates:
     groups:
       github-actions:
         patterns: ["*"]
+  - package-ecosystem: terraform
+    directory: /infra
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    groups:
+      terraform:
+        patterns: ["*"]
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    groups:
+      docker:
+        patterns: ["*"]

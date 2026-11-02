@@ -102,7 +102,7 @@ func (c *Client) SaveMeal(ctx context.Context, meal Meal) (*Meal, error) {
 		return nil, fmt.Errorf("failed to save meal: %w", err)
 	}
 
-	defer c.notify(ctx)
+	defer func() { _ = c.notify(ctx) }()
 
 	return &meal, nil
 }

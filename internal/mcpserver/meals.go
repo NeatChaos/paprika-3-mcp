@@ -99,9 +99,9 @@ func formatMeals(meals []paprika.Meal, mealTypes []paprika.MealType, recipes []p
 	})
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("%d meals for %s:\n", len(selected), period))
+	fmt.Fprintf(&sb, "%d meals for %s:\n", len(selected), period)
 	if len(selected) > maxListedMeals {
-		sb.WriteString(fmt.Sprintf("(showing the first %d; ask for a shorter period to see the rest)\n", maxListedMeals))
+		fmt.Fprintf(&sb, "(showing the first %d; ask for a shorter period to see the rest)\n", maxListedMeals)
 		selected = selected[:maxListedMeals]
 	}
 
@@ -114,7 +114,7 @@ func formatMeals(meals []paprika.Meal, mealTypes []paprika.MealType, recipes []p
 			if t, err := time.Parse(dateLayout, day); err == nil {
 				weekday = " (" + t.Weekday().String() + ")"
 			}
-			sb.WriteString(fmt.Sprintf("\n%s%s\n", day, weekday))
+			fmt.Fprintf(&sb, "\n%s%s\n", day, weekday)
 		}
 
 		typeName := "Meal"
@@ -127,9 +127,9 @@ func formatMeals(meals []paprika.Meal, mealTypes []paprika.MealType, recipes []p
 			if current, ok := recipeNames[*m.RecipeUID]; ok {
 				name = current
 			}
-			sb.WriteString(fmt.Sprintf("- %s: %s (recipe uid: %s)\n", typeName, name, *m.RecipeUID))
+			fmt.Fprintf(&sb, "- %s: %s (recipe uid: %s)\n", typeName, name, *m.RecipeUID)
 		} else {
-			sb.WriteString(fmt.Sprintf("- %s: %s (free text, no recipe)\n", typeName, m.Name))
+			fmt.Fprintf(&sb, "- %s: %s (free text, no recipe)\n", typeName, m.Name)
 		}
 	}
 

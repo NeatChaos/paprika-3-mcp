@@ -19,7 +19,7 @@ updates:
       github-actions:
         patterns: ["*"]
   - package-ecosystem: terraform
-    directory: /infra
+    directories: [/infra, /infra/bootstrap]
     schedule:
       interval: weekly
     cooldown:

@@ -33,13 +33,89 @@ jobs:
       - uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6.3.2
       - name: fmt
         run: terraform fmt -check -recursive infra
-      - name: init
-        run: terraform -chdir=infra init -backend=false
       - name: validate
-        run: terraform -chdir=infra validate
+        run: |
+          for dir in infra infra/bootstrap; do
+            terraform -chdir="$dir" init -backend=false
+            terraform -chdir="$dir" validate
+          done
       - name: tflint
         run: |
           tflint --chdir=infra --init
-          tflint --chdir=infra
+          tflint --chdir=infra --recursive
         env:
           GITHUB_TOKEN: ${{ github.token }}
+
+  plan:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    environment: cloud-plan
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    env:
+      GCP_PROJECT: ${{ vars.GCP_PROJECT }}
+      TF_VAR_project_id: ${{ vars.GCP_PROJECT }}
+      TF_VAR_allowed_emails: ${{ vars.ALLOWED_EMAILS }}
+      TF_VAR_access_team_domain: ${{ vars.ACCESS_TEAM_DOMAIN }}
+      TF_VAR_access_aud: ${{ vars.ACCESS_AUD }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.PLANNER_EMAIL }}
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_wrapper: false
+      - run: terraform -chdir=infra init -input=false -backend-config="bucket=${GCP_PROJECT}-tfstate"
+      - name: Terraform plan
+        id: plan
+        run: |
+          set +e
+          terraform -chdir=infra plan -input=false -lock=false -no-color -detailed-exitcode -out=tfplan 2>&1 | tee /tmp/tf-plan-raw.txt
+          code=${PIPESTATUS[0]}
+          set -e
+          echo "exitcode=${code}" >> "$GITHUB_OUTPUT"
+          if [ "${code}" -eq 1 ]; then cp /tmp/tf-plan-raw.txt /tmp/tf-plan.txt; exit 1; fi
+          terraform -chdir=infra show -no-color tfplan > /tmp/tf-plan.txt
+      - name: Post plan as PR comment
+        if: always()
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PLAN_EXITCODE: ${{ steps.plan.outputs.exitcode }}
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- terraform-plan-comment -->';
+            const code = process.env.PLAN_EXITCODE || '';
+            let plan = '';
+            try {
+              plan = fs.readFileSync('/tmp/tf-plan.txt', 'utf8');
+            } catch {
+              plan = '(plan step produced no output)';
+            }
+            const max = 60000;
+            if (plan.length > max) {
+              plan = '... (truncated, see the workflow run logs for the full plan)\n' + plan.slice(-max);
+            }
+            const header = code === '2'
+              ? '### ⚠️ Terraform plan: changes WILL be applied on merge'
+              : code === '0'
+              ? '### ✅ Terraform plan: no changes'
+              : '### ❌ Terraform plan: error — see run logs';
+            const body = `${marker}\n${header}\n\n<details><summary>Show plan output</summary>\n\n\`\`\`terraform\n${plan}\n\`\`\`\n\n</details>`;
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number,
+            });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }

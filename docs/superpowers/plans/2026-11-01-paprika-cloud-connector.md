@@ -182,6 +182,8 @@ Requires Owner gate A.
 
 ### Task 4: Spike: claude.ai through Cloudflare Access Managed OAuth
 
+**Dropped.** The owner already runs Access Managed OAuth with Claude elsewhere. The Worker proxy moved to Task 3 (`infra/worker/`), and Gate C happens at first deploy.
+
 Requires Gate B. Gate C happens during this task. Branch `spike/cloudflare-access`, never merged.
 
 This spike decides whether Access Managed OAuth works with claude.ai web and mobile. [anthropics/claude-ai-mcp#410](https://github.com/anthropics/claude-ai-mcp/issues/410) reports that the flow fails in claude.ai web and mobile but works in Claude Code. The suspected cause is a missing RFC 8707 `resource` parameter. Issue #572 reports success through an Access MCP portal.

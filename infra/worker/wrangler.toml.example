@@ -1,12 +1,8 @@
 name = "paprika-mcp-proxy"
 main = "worker.js"
 compatibility_date = "2026-10-01"
-workers_dev = false
+workers_dev = true
 preview_urls = false
 
-routes = [
-  { pattern = "<hostname>/*", zone_name = "<zone>" },
-]
-
 [vars]
-ORIGIN = "https://paprika-mcp-xxxx.a.run.app"
+ORIGIN = "https://paprika-mcp-<project-number>.<region>.run.app"

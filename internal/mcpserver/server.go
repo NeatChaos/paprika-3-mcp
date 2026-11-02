@@ -143,6 +143,10 @@ func (s *Server) tools() []server.ServerTool {
 		mcp.WithString("recipe", mcp.Description("The uid or name of an existing recipe. Pass either recipe or name.")),
 		mcp.WithString("name", mcp.Description("Free text for a meal without a recipe, e.g. \"Uit eten\". Pass either recipe or name.")),
 	)
+	removeMealTool := mcp.NewTool("remove_meal",
+		mcp.WithDescription("Remove one meal from the Paprika meal planner by its meal uid (see list_meals). The recipe itself is not affected."),
+		mcp.WithString("uid", mcp.Description("The meal uid shown by list_meals"), mcp.Required()),
+	)
 
 	return []server.ServerTool{
 		{Tool: createRecipeTool, Handler: s.createRecipe},
@@ -152,6 +156,7 @@ func (s *Server) tools() []server.ServerTool {
 		{Tool: listCategoriesTool, Handler: s.listCategories},
 		{Tool: listMealsTool, Handler: s.listMeals},
 		{Tool: addMealTool, Handler: s.addMeal},
+		{Tool: removeMealTool, Handler: s.removeMeal},
 	}
 }
 

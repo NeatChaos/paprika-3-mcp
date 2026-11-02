@@ -65,7 +65,7 @@ func formatMeals(meals []paprika.Meal, mealTypes []paprika.MealType, recipes []p
 	from, to := start.Format(dateLayout), end.Format(dateLayout)
 	var selected []paprika.Meal
 	for _, m := range meals {
-		if len(m.Date) < len(dateLayout) {
+		if m.Deleted || len(m.Date) < len(dateLayout) {
 			continue
 		}
 		if day := m.Date[:len(dateLayout)]; day >= from && day <= to {
@@ -127,9 +127,9 @@ func formatMeals(meals []paprika.Meal, mealTypes []paprika.MealType, recipes []p
 			if current, ok := recipeNames[*m.RecipeUID]; ok {
 				name = current
 			}
-			fmt.Fprintf(&sb, "- %s: %s (recipe uid: %s)\n", typeName, name, *m.RecipeUID)
+			fmt.Fprintf(&sb, "- %s: %s (recipe uid: %s, meal uid: %s)\n", typeName, name, *m.RecipeUID, m.UID)
 		} else {
-			fmt.Fprintf(&sb, "- %s: %s (free text, no recipe)\n", typeName, m.Name)
+			fmt.Fprintf(&sb, "- %s: %s (free text, no recipe, meal uid: %s)\n", typeName, m.Name, m.UID)
 		}
 	}
 
@@ -166,7 +166,7 @@ func (s *Server) addMeal(ctx context.Context, req mcp.CallToolRequest) (*mcp.Cal
 
 	meal := paprika.Meal{
 		Date:    date.Format(paprika.MealDateLayout),
-		Type:    mealType.OriginalType,
+		Type:    builtInType(mealType),
 		TypeUID: mealType.UID,
 		Name:    freeText,
 	}
@@ -197,4 +197,46 @@ func (s *Server) addMeal(ctx context.Context, req mcp.CallToolRequest) (*mcp.Cal
 		what = fmt.Sprintf("%q (free text)", saved.Name)
 	}
 	return mcp.NewToolResultText(fmt.Sprintf("Added %s as %s on %s (%s). Meal uid: %s", what, mealType.Name, date.Format(dateLayout), date.Weekday(), saved.UID)), nil
+}
+
+// builtInType is the integer Type for a meal. Custom meal types have no built-in type, and no capture shows
+// what the app sends for them, so they get 0; TypeUID is what identifies the slot.
+func builtInType(mt paprika.MealType) int {
+	if mt.OriginalType == nil {
+		return 0
+	}
+	return *mt.OriginalType
+}
+
+func (s *Server) removeMeal(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	start := time.Now()
+	uid := strings.TrimSpace(stringArg(req.GetArguments(), "uid"))
+	if uid == "" {
+		return mcp.NewToolResultError("uid is required (see list_meals)"), nil
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, writeTimeout)
+	defer cancel()
+	meals, err := s.paprika3.ListMeals(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var meal *paprika.Meal
+	for i := range meals.Result {
+		if meals.Result[i].UID == uid && !meals.Result[i].Deleted {
+			meal = &meals.Result[i]
+			break
+		}
+	}
+	if meal == nil {
+		return mcp.NewToolResultError(fmt.Sprintf("no meal with uid %q (see list_meals)", uid)), nil
+	}
+
+	meal.Deleted = true
+	if _, err := s.paprika3.SaveMeal(ctx, *meal); err != nil {
+		return nil, err
+	}
+
+	s.logger.Info("Removed meal", "name", meal.Name, "uid", meal.UID, "date", meal.Date, "duration", time.Since(start))
+	return mcp.NewToolResultText(fmt.Sprintf("Removed %q from %s. Meal uid: %s", meal.Name, meal.Date[:len(dateLayout)], meal.UID)), nil
 }

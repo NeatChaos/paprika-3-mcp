@@ -35,7 +35,7 @@ func (c *Client) ListCategories(ctx context.Context) (*CategoryList, error) {
 }
 
 // MealType is a slot in the meal planner (Breakfast, Lunch, Dinner, or a user-defined one).
-// Users can add their own, so meals must be matched on TypeUID rather than on the integer Type.
+// Users can add their own (OriginalType nil), so meals must be matched on TypeUID rather than on the integer Type.
 type MealType struct {
 	UID          string `json:"uid"`
 	Name         string `json:"name"`
@@ -43,7 +43,7 @@ type MealType struct {
 	Color        string `json:"color"`
 	ExportAllDay bool   `json:"export_all_day"`
 	ExportTime   int    `json:"export_time"`
-	OriginalType int    `json:"original_type"`
+	OriginalType *int   `json:"original_type"`
 }
 
 type MealTypeList struct {
@@ -70,6 +70,7 @@ type Meal struct {
 	TypeUID      string  `json:"type_uid"`
 	Name         string  `json:"name"`
 	OrderFlag    int     `json:"order_flag"`
+	Deleted      bool    `json:"deleted"`
 	Scale        *string `json:"scale"`
 	IsIngredient bool    `json:"is_ingredient"`
 }

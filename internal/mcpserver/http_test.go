@@ -52,7 +52,7 @@ func TestHTTPHandler(t *testing.T) {
 	for _, tool := range list["result"].(map[string]interface{})["tools"].([]interface{}) {
 		names = append(names, tool.(map[string]interface{})["name"].(string))
 	}
-	assert.ElementsMatch(t, []string{"create_paprika_recipe", "update_paprika_recipe", "search_recipes", "get_recipe", "list_categories", "list_meals", "add_meal"}, names)
+	assert.ElementsMatch(t, []string{"create_paprika_recipe", "update_paprika_recipe", "search_recipes", "get_recipe", "list_categories", "list_meals", "add_meal", "remove_meal"}, names)
 
 	call := postRPC(t, ts.URL, 3, "tools/call", map[string]interface{}{
 		"name":      "search_recipes",

@@ -30,11 +30,31 @@ type fakeClient struct {
 	savedMeals  []paprika.Meal
 	savedRecipe []paprika.Recipe
 	failGet     map[string]bool
+
+	calls    map[string]int
+	failList bool
+	// gate, when set, blocks ListRecipes until it is closed
+	gate chan struct{}
+}
+
+// count records a Paprika request; callers must hold mu
+func (f *fakeClient) count(method string) {
+	if f.calls == nil {
+		f.calls = map[string]int{}
+	}
+	f.calls[method]++
 }
 
 func (f *fakeClient) ListRecipes(ctx context.Context) (*paprika.RecipeList, error) {
+	if f.gate != nil {
+		<-f.gate
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.count("ListRecipes")
+	if f.failList {
+		return nil, errors.New("connection reset by peer")
+	}
 	var list paprika.RecipeList
 	for _, r := range f.recipes {
 		list.Result = append(list.Result, struct {
@@ -48,6 +68,7 @@ func (f *fakeClient) ListRecipes(ctx context.Context) (*paprika.RecipeList, erro
 func (f *fakeClient) GetRecipe(ctx context.Context, uid string) (*paprika.Recipe, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.count("GetRecipe")
 	f.getCalls = append(f.getCalls, uid)
 	if f.failGet[uid] {
 		return nil, errors.New("connection reset by peer")
@@ -62,6 +83,7 @@ func (f *fakeClient) GetRecipe(ctx context.Context, uid string) (*paprika.Recipe
 func (f *fakeClient) SaveRecipe(ctx context.Context, recipe paprika.Recipe) (*paprika.Recipe, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.count("SaveRecipe")
 	if recipe.UID == "" {
 		recipe.UID = "NEW-RECIPE"
 	}
@@ -71,20 +93,30 @@ func (f *fakeClient) SaveRecipe(ctx context.Context, recipe paprika.Recipe) (*pa
 }
 
 func (f *fakeClient) ListCategories(ctx context.Context) (*paprika.CategoryList, error) {
-	return &paprika.CategoryList{Result: f.categories}, nil
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.count("ListCategories")
+	return &paprika.CategoryList{Result: append([]paprika.Category(nil), f.categories...)}, nil
 }
 
 func (f *fakeClient) ListMealTypes(ctx context.Context) (*paprika.MealTypeList, error) {
-	return &paprika.MealTypeList{Result: f.mealTypes}, nil
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.count("ListMealTypes")
+	return &paprika.MealTypeList{Result: append([]paprika.MealType(nil), f.mealTypes...)}, nil
 }
 
 func (f *fakeClient) ListMeals(ctx context.Context) (*paprika.MealList, error) {
-	return &paprika.MealList{Result: f.meals}, nil
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.count("ListMeals")
+	return &paprika.MealList{Result: append([]paprika.Meal(nil), f.meals...)}, nil
 }
 
 func (f *fakeClient) SaveMeal(ctx context.Context, meal paprika.Meal) (*paprika.Meal, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.count("SaveMeal")
 	if meal.UID == "" {
 		meal.UID = "NEW-MEAL"
 	}

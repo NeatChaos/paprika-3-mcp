@@ -92,15 +92,38 @@ func TestComputeHashInvariants(t *testing.T) {
 }
 
 func TestHashSerialization(t *testing.T) {
-	r := Recipe{Name: "a<b>&c/d" + string(rune(0x2028)) + "e😀\bf\tg"}
-	got, err := hashInput(r)
-	require.NoError(t, err)
+	lineSep := string(rune(0x2028))
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "slashes, HTML characters, line separator, emoji and controls",
+			input: "a<b>&c/d" + lineSep + "e😀\bf\tg",
+			want:  `"a<b>&c\/d` + lineSep + `e😀\bf\tg"`,
+		},
+		{
+			name:  "literal backslash-u2028 text stays escaped",
+			input: "a\\" + "u2028b",
+			want:  `"a\\` + "u2028b" + `"`,
+		},
+		{
+			name:  "literal backslash before a real line separator",
+			input: "a\\" + lineSep + "b",
+			want:  `"a\\` + lineSep + `b"`,
+		},
+	}
 
-	want := []byte(`"a<b>&c\/d`)
-	want = append(want, 0xE2, 0x80, 0xA8)
-	want = append(want, []byte(`e😀\bf\tg"`)...)
-	assert.True(t, bytes.Contains(got, want), "hash input %q does not contain %q", got, want)
-	assert.False(t, bytes.HasSuffix(got, []byte("\n")))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := hashInput(Recipe{Name: tt.input})
+			require.NoError(t, err)
+			assert.True(t, bytes.Contains(got, []byte(tt.want)), "hash input %q does not contain %q", got, tt.want)
+			assert.True(t, json.Valid(got))
+			assert.False(t, bytes.HasSuffix(got, []byte("\n")))
+		})
+	}
 }
 
 func TestRecipeWireRoundTrip(t *testing.T) {

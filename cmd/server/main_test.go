@@ -102,7 +102,7 @@ func TestLoadConfigModes(t *testing.T) {
 	if cfg.access == nil || cfg.secret != "" {
 		t.Errorf("ACCESS_AUD set: access mode must win and MCP_SECRET be ignored, got %+v", cfg)
 	}
-	if cfg.port != "8080" {
+	if cfg.port != "3000" {
 		t.Errorf("default port = %q", cfg.port)
 	}
 	env["PORT"] = "9000"

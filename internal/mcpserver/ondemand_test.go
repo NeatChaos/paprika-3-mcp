@@ -385,3 +385,57 @@ func TestOnDemandToolsIncludeRefresh(t *testing.T) {
 	}
 	assert.Contains(t, names, "refresh_paprika")
 }
+
+func TestWritesOnColdInstance(t *testing.T) {
+	coldStartPlus := func(extra map[string]int) map[string]int {
+		want := map[string]int{"ListCategories": 1, "ListMealTypes": 1, "ListMeals": 1, "ListRecipes": 1}
+		for k, v := range extra {
+			want[k] += v
+		}
+		return want
+	}
+
+	for name, tc := range map[string]struct {
+		call func(*Server) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error)
+		args map[string]interface{}
+		want map[string]int
+	}{
+		"remove_meal": {
+			call: func(s *Server) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				return s.removeMeal
+			},
+			args: map[string]interface{}{"uid": "M2"},
+			want: coldStartPlus(map[string]int{"ListMeals": 1, "SaveMeal": 1}),
+		},
+		"update_paprika_recipe": {
+			call: func(s *Server) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				return s.updateRecipe
+			},
+			args: map[string]interface{}{"uid": "R1", "notes": "Lekker"},
+			want: coldStartPlus(map[string]int{"GetRecipe": 1, "SaveRecipe": 1}),
+		},
+		"add_meal": {
+			call: func(s *Server) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				return s.addMeal
+			},
+			args: map[string]interface{}{"date": "2025-03-10", "meal_type": "lunch", "name": "Tosti"},
+			want: coldStartPlus(map[string]int{"SaveMeal": 1}),
+		},
+		"create_paprika_recipe": {
+			call: func(s *Server) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				return s.createRecipe
+			},
+			args: map[string]interface{}{"name": "Ravioli", "ingredients": "pasta", "directions": "koken"},
+			want: coldStartPlus(map[string]int{"SaveRecipe": 1}),
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			client := newFakeAccount()
+			s := newOnDemandServer(client, storeWith(t, client), nil)
+
+			out, isErr := callTool(t, tc.call(s), tc.args)
+			assert.False(t, isErr, out)
+			assert.Equal(t, tc.want, client.takeCalls())
+		})
+	}
+}

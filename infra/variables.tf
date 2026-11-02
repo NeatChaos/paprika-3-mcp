@@ -10,7 +10,7 @@ variable "region" {
 }
 
 variable "image" {
-  description = "Image reference (preferably @sha256:) to deploy. The Cloud Run service is created only when this and access_aud are both set."
+  description = "Image reference (repo/server@sha256:...) to deploy. Empty keeps the live image; the first create must pass one."
   type        = string
   default     = ""
 }

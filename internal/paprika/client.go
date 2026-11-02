@@ -54,7 +54,7 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req.Body != nil {
 		var err error
 		bodyBytes, err = io.ReadAll(req.Body)
-		req.Body.Close()
+		_ = req.Body.Close()
 		if err != nil {
 			return nil, fmt.Errorf("failed to read request body: %w", err)
 		}
@@ -71,8 +71,8 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			return resp, err
 		}
 		if resp != nil {
-			io.Copy(io.Discard, resp.Body)
-			resp.Body.Close()
+			_, _ = io.Copy(io.Discard, resp.Body)
+			_ = resp.Body.Close()
 		}
 
 		select {
@@ -174,7 +174,7 @@ func login(ctx context.Context, client http.Client, username, password string) (
 		return "", err
 	}
 
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("failed to login: %s", resp.Status)
@@ -219,7 +219,7 @@ func (c *Client) ListRecipes(ctx context.Context) (*RecipeList, error) {
 		return nil, err
 	}
 
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		c.logger.Error("failed to get recipes", "status", resp.Status)
@@ -283,25 +283,25 @@ func (r *Recipe) ResourceDescription() string {
 func (r *Recipe) ToMarkdown() string {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("# %s\n\n", r.Name))
+	fmt.Fprintf(&sb, "# %s\n\n", r.Name)
 
 	if r.Description != "" {
-		sb.WriteString(fmt.Sprintf("_%s_\n\n", r.Description))
+		fmt.Fprintf(&sb, "_%s_\n\n", r.Description)
 	}
 
 	if r.Servings != "" || r.PrepTime != "" || r.CookTime != "" || r.Difficulty != "" {
 		sb.WriteString("## Details\n")
 		if r.Servings != "" {
-			sb.WriteString(fmt.Sprintf("- **Servings:** %s\n", r.Servings))
+			fmt.Fprintf(&sb, "- **Servings:** %s\n", r.Servings)
 		}
 		if r.PrepTime != "" {
-			sb.WriteString(fmt.Sprintf("- **Prep Time:** %s\n", r.PrepTime))
+			fmt.Fprintf(&sb, "- **Prep Time:** %s\n", r.PrepTime)
 		}
 		if r.CookTime != "" {
-			sb.WriteString(fmt.Sprintf("- **Cook Time:** %s\n", r.CookTime))
+			fmt.Fprintf(&sb, "- **Cook Time:** %s\n", r.CookTime)
 		}
 		if r.Difficulty != "" {
-			sb.WriteString(fmt.Sprintf("- **Difficulty:** %s\n", r.Difficulty))
+			fmt.Fprintf(&sb, "- **Difficulty:** %s\n", r.Difficulty)
 		}
 		sb.WriteString("\n")
 	}
@@ -310,7 +310,7 @@ func (r *Recipe) ToMarkdown() string {
 		sb.WriteString("## Ingredients\n")
 		for _, line := range strings.Split(strings.TrimSpace(r.Ingredients), "\n") {
 			if line != "" {
-				sb.WriteString(fmt.Sprintf("- %s\n", line))
+				fmt.Fprintf(&sb, "- %s\n", line)
 			}
 		}
 		sb.WriteString("\n")
@@ -323,7 +323,7 @@ func (r *Recipe) ToMarkdown() string {
 		for _, line := range strings.Split(strings.TrimSpace(r.Directions), "\n") {
 			if line = strings.TrimSpace(line); line != "" {
 				step++
-				sb.WriteString(fmt.Sprintf("%d. %s\n", step, line))
+				fmt.Fprintf(&sb, "%d. %s\n", step, line)
 			}
 		}
 		sb.WriteString("\n")
@@ -413,7 +413,7 @@ func gzipJSON(v interface{}) ([]byte, error) {
 	writer := gzip.NewWriter(&buf)
 	_, err = writer.Write(jsonBytes)
 	if err != nil {
-		writer.Close()
+		_ = writer.Close()
 		return nil, err
 	}
 	if err := writer.Close(); err != nil {
@@ -440,7 +440,7 @@ func (c *Client) GetRecipe(ctx context.Context, uid string) (*Recipe, error) {
 		return nil, err
 	}
 
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		c.logger.Error("failed to get recipe", "status", resp.Status)
@@ -491,7 +491,7 @@ func (c *Client) SaveRecipe(ctx context.Context, recipe Recipe) (*Recipe, error)
 		return nil, fmt.Errorf("failed to save recipe: %w", err)
 	}
 
-	defer c.notify(ctx)
+	defer func() { _ = c.notify(ctx) }()
 
 	return &recipe, nil
 }
@@ -527,7 +527,7 @@ func (c *Client) postV2(ctx context.Context, endpoint string, v interface{}) err
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	rawBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -553,7 +553,7 @@ func (c *Client) getResult(ctx context.Context, endpoint string, v interface{}) 
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status %s", resp.Status)
@@ -582,7 +582,7 @@ func (c *Client) notify(ctx context.Context) error {
 		return err
 	}
 
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		c.logger.Error("failed to notify", "status", resp.Status)

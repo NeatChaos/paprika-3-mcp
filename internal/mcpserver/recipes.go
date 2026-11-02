@@ -64,10 +64,10 @@ func (s *Server) searchRecipes(ctx context.Context, req mcp.CallToolRequest) (*m
 
 	var sb strings.Builder
 	if len(matches) > limit {
-		sb.WriteString(fmt.Sprintf("Found %d recipes, showing the first %d:\n", len(matches), limit))
+		fmt.Fprintf(&sb, "Found %d recipes, showing the first %d:\n", len(matches), limit)
 		matches = matches[:limit]
 	} else {
-		sb.WriteString(fmt.Sprintf("Found %d recipes:\n", len(matches)))
+		fmt.Fprintf(&sb, "Found %d recipes:\n", len(matches))
 	}
 	for _, r := range matches {
 		sb.WriteString(formatRecipeLine(r, ix))
@@ -137,7 +137,7 @@ func (s *Server) listCategories(ctx context.Context, req mcp.CallToolRequest) (*
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("%d categories, %d recipes. Counts in parentheses: recipes directly in the category, and including subcategories where that differs.\n", len(categories), len(recipes)))
+	fmt.Fprintf(&sb, "%d categories, %d recipes. Counts in parentheses: recipes directly in the category, and including subcategories where that differs.\n", len(categories), len(recipes))
 	var walk func(parent string, depth int)
 	walk = func(parent string, depth int) {
 		for _, c := range ix.children[parent] {
@@ -153,12 +153,12 @@ func (s *Server) listCategories(ctx context.Context, req mcp.CallToolRequest) (*
 			if total != direct[c.UID] {
 				count = fmt.Sprintf("%d direct, %d incl. subcategories", direct[c.UID], total)
 			}
-			sb.WriteString(fmt.Sprintf("%s- %s (%s)\n", strings.Repeat("  ", depth), c.Name, count))
+			fmt.Fprintf(&sb, "%s- %s (%s)\n", strings.Repeat("  ", depth), c.Name, count)
 			walk(c.UID, depth+1)
 		}
 	}
 	walk("", 0)
-	sb.WriteString(fmt.Sprintf("Recipes without a category: %d\n", uncategorized))
+	fmt.Fprintf(&sb, "Recipes without a category: %d\n", uncategorized)
 
 	return mcp.NewToolResultText(sb.String()), nil
 }

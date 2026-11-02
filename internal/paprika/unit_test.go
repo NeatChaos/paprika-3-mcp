@@ -94,7 +94,7 @@ func decodeUpload(t *testing.T, r recordedRequest) []byte {
 }
 
 func okHandler(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte(`{"result": true}`))
+	_, _ = w.Write([]byte(`{"result": true}`))
 }
 
 func TestLogin(t *testing.T) {
@@ -113,7 +113,7 @@ func TestLogin(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			client, requests := fakePaprika(t, func(w http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, "application/x-www-form-urlencoded", r.Header.Get("Content-Type"))
-				w.Write([]byte(`{"result": {"token": "test-token"}}`))
+				_, _ = w.Write([]byte(`{"result": {"token": "test-token"}}`))
 			})
 
 			token, err := login(context.Background(), *client, tt.username, tt.password)
@@ -172,7 +172,7 @@ func TestSaveRecipe(t *testing.T) {
 
 	t.Run("error in response body is returned", func(t *testing.T) {
 		httpClient, _ := fakePaprika(t, func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte(`{"error": {"code": 1, "message": "nope"}}`))
+			_, _ = w.Write([]byte(`{"error": {"code": 1, "message": "nope"}}`))
 		})
 		client := newFakeClient(httpClient)
 
@@ -184,7 +184,7 @@ func TestSaveRecipe(t *testing.T) {
 func TestListMeals(t *testing.T) {
 	httpClient, _ := fakePaprika(t, func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/api/v2/sync/meals/", r.URL.Path)
-		w.Write([]byte(`{"result": [
+		_, _ = w.Write([]byte(`{"result": [
 			{"uid": "M1", "recipe_uid": null, "date": "2025-01-01 00:00:00", "type": 2, "name": "Pizza", "order_flag": 0, "type_uid": "T2", "scale": null, "is_ingredient": false},
 			{"uid": "M2", "recipe_uid": "R1", "date": "2025-01-02 00:00:00", "type": 0, "name": "Porridge", "order_flag": 1, "type_uid": "T0", "scale": null, "is_ingredient": false}
 		]}`))
@@ -205,9 +205,9 @@ func TestListCategoriesAndMealTypes(t *testing.T) {
 	httpClient, _ := fakePaprika(t, func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/v2/sync/categories/":
-			w.Write([]byte(`{"result": [{"uid": "C1", "name": "Pasta", "order_flag": 0, "parent_uid": "C0", "cookbook_uid": null}, {"uid": "C0", "name": "Soort gerecht", "order_flag": 0, "parent_uid": null}]}`))
+			_, _ = w.Write([]byte(`{"result": [{"uid": "C1", "name": "Pasta", "order_flag": 0, "parent_uid": "C0", "cookbook_uid": null}, {"uid": "C0", "name": "Soort gerecht", "order_flag": 0, "parent_uid": null}]}`))
 		case "/api/v2/sync/mealtypes/":
-			w.Write([]byte(`{"result": [{"uid": "T1", "name": "Nagerecht", "order_flag": 4, "color": "#FFCC00", "export_all_day": false, "export_time": 72000, "original_type": 0}]}`))
+			_, _ = w.Write([]byte(`{"result": [{"uid": "T1", "name": "Nagerecht", "order_flag": 4, "color": "#FFCC00", "export_all_day": false, "export_time": 72000, "original_type": 0}]}`))
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}

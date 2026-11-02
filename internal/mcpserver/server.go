@@ -352,16 +352,16 @@ func recipeMarkdown(recipe paprika.Recipe, ix *categoryIndex) string {
 	sb.WriteString(recipe.ToMarkdown())
 	sb.WriteString("## Paprika\n")
 	if names := ix.names(recipe.Categories); len(names) > 0 {
-		sb.WriteString(fmt.Sprintf("- **Categories:** %s\n", strings.Join(names, ", ")))
+		fmt.Fprintf(&sb, "- **Categories:** %s\n", strings.Join(names, ", "))
 	} else {
 		sb.WriteString("- **Categories:** none\n")
 	}
 	if recipe.Source != "" {
-		sb.WriteString(fmt.Sprintf("- **Source:** %s\n", recipe.Source))
+		fmt.Fprintf(&sb, "- **Source:** %s\n", recipe.Source)
 	}
 	if recipe.SourceURL != "" {
-		sb.WriteString(fmt.Sprintf("- **Source URL:** %s\n", recipe.SourceURL))
+		fmt.Fprintf(&sb, "- **Source URL:** %s\n", recipe.SourceURL)
 	}
-	sb.WriteString(fmt.Sprintf("- **UID:** %s\n", recipe.UID))
+	fmt.Fprintf(&sb, "- **UID:** %s\n", recipe.UID)
 	return sb.String()
 }

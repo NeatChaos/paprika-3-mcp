@@ -165,13 +165,13 @@ func resolveRecipe(recipes []paprika.Recipe, ref string) (paprika.Recipe, error)
 
 	sort.Slice(candidates, func(i, j int) bool { return candidates[i].Name < candidates[j].Name })
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("%d recipes match %q; pass the uid of the one you mean:\n", len(candidates), ref))
+	fmt.Fprintf(&sb, "%d recipes match %q; pass the uid of the one you mean:\n", len(candidates), ref)
 	for i, r := range candidates {
 		if i == 20 {
-			sb.WriteString(fmt.Sprintf("... and %d more\n", len(candidates)-i))
+			fmt.Fprintf(&sb, "... and %d more\n", len(candidates)-i)
 			break
 		}
-		sb.WriteString(fmt.Sprintf("- %s (uid: %s)\n", r.Name, r.UID))
+		fmt.Fprintf(&sb, "- %s (uid: %s)\n", r.Name, r.UID)
 	}
 	return paprika.Recipe{}, fmt.Errorf("%s", sb.String())
 }

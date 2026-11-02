@@ -46,8 +46,8 @@ make image TAG=<tag> REGISTRY=<repo> # or pass the registry explicitly
 `worker/worker.js` forwards each request, with the same path, query, headers and body, to the `run.app` origin named by `ORIGIN` and streams the response back unbuffered (MCP Streamable HTTP may use SSE).
 
 ```sh
-cp infra/worker/wrangler.toml.example infra/worker/wrangler.toml   # set ORIGIN to the output of `terraform -chdir=infra output -raw run_url`, route and zone
+cp infra/worker/wrangler.toml.example infra/worker/wrangler.toml   # set ORIGIN; the run.app URL is deterministic, so the Worker can be deployed before the service
 npx wrangler deploy --config infra/worker/wrangler.toml
 ```
 
-Cloudflare Access must be in front of the Worker's hostname so the `Cf-Access-Jwt-Assertion` header is added before the request reaches the origin; the server verifies that JWT. A hostname without Access would reach Cloud Run unauthenticated by Cloudflare and be rejected by the app, but do not rely on that.
+The Worker serves on `paprika-mcp-proxy.<subdomain>.workers.dev`; no custom domain is needed. Protect it with a Zero Trust self-hosted application using the **Workers** destination, with Managed OAuth on. Access adds the `Cf-Access-Jwt-Assertion` header before the request reaches the origin; the server verifies that JWT. The connector URL is `https://paprika-mcp-proxy.<subdomain>.workers.dev/mcp`.

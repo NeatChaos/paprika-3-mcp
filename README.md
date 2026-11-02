@@ -31,6 +31,8 @@ See anything missing? Open an issue on this repo to request a feature!
   Save a new recipe. Pass `categories` as names of existing categories; unknown names are rejected with suggestions and the recipe is not saved. **Categories are never created.**
 - `update_paprika_recipe`  
   Modify an existing recipe. Only the fields you pass change; categories, photo, rating and the created date are kept.
+- `delete_paprika_recipe`  
+  Move a recipe to the Paprika trash, by uid. It can be restored in the app until the trash is emptied.
 
 **Meal planner**
 
@@ -38,8 +40,10 @@ See anything missing? Open an issue on this repo to request a feature!
   Meals between `start_date` and `end_date` (`YYYY-MM-DD`, inclusive, past or future), grouped per day with meal type and recipe name, or the free text for meals without a recipe
 - `add_meal`  
   Put a recipe (`recipe`: uid or name) or free text (`name`) on a `date` with a `meal_type`. Meal types are matched against the ones defined in your Paprika account, including custom ones, and accept Dutch and English names (`ontbijt`/`breakfast`, `diner`/`dinner`, `nagerecht`/`dessert`, ...). A recipe name that matches several recipes is rejected with the candidates.
+- `remove_meal`  
+  Remove one meal from the planner by its meal uid (see `list_meals`). The recipe itself is not affected.
 
-Every write triggers a sync notification so the change shows up on your other devices. There are no delete tools, and grocery lists are not supported.
+Every write triggers a sync notification so the change shows up on your other devices. Recipes are never permanently deleted, and grocery lists are not supported.
 
 #### ⚡ Caching
 

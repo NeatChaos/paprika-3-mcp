@@ -282,8 +282,12 @@ func (c *recipeCache) refresh(ctx context.Context, skipIfNewerThan time.Duration
 func (c *recipeCache) put(recipe paprika.Recipe) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.recipes[recipe.UID] = recipe
 	c.hashes[recipe.UID] = recipe.Hash
+	if recipe.InTrash {
+		delete(c.recipes, recipe.UID)
+	} else {
+		c.recipes[recipe.UID] = recipe
+	}
 	c.save()
 }
 

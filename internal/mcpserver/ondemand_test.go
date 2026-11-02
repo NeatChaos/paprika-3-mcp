@@ -414,6 +414,13 @@ func TestWritesOnColdInstance(t *testing.T) {
 			args: map[string]interface{}{"uid": "R1", "notes": "Lekker"},
 			want: coldStartPlus(map[string]int{"GetRecipe": 1, "SaveRecipe": 1}),
 		},
+		"delete_paprika_recipe": {
+			call: func(s *Server) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				return s.deleteRecipe
+			},
+			args: map[string]interface{}{"uid": "R1"},
+			want: coldStartPlus(map[string]int{"GetRecipe": 1, "SaveRecipe": 1}),
+		},
 		"add_meal": {
 			call: func(s *Server) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 				return s.addMeal
@@ -438,4 +445,52 @@ func TestWritesOnColdInstance(t *testing.T) {
 			assert.Equal(t, tc.want, client.takeCalls())
 		})
 	}
+}
+
+func TestDeleteRecipe(t *testing.T) {
+	client := newFakeAccount()
+	store := storeWith(t, client)
+	s := newOnDemandServer(client, store, nil)
+	warmUp(t, s, client)
+
+	out, isErr := callTool(t, s.deleteRecipe, map[string]interface{}{"uid": "R1"})
+	assert.False(t, isErr, out)
+	assert.Contains(t, out, "Pasta met prei")
+	assert.Equal(t, map[string]int{"GetRecipe": 1, "SaveRecipe": 1}, client.takeCalls())
+	require.Len(t, client.savedRecipe, 1)
+	assert.True(t, client.savedRecipe[0].InTrash)
+	assert.Equal(t, 1, store.saveCount())
+
+	out, _ = callTool(t, s.searchRecipes, map[string]interface{}{"query": "Pasta met prei"})
+	assert.NotContains(t, out, "R1")
+
+	out, isErr = callTool(t, s.deleteRecipe, map[string]interface{}{"uid": "R1"})
+	assert.True(t, isErr)
+	assert.Contains(t, out, "trash")
+}
+
+func TestDeleteRecipeConflict(t *testing.T) {
+	client := newFakeAccount()
+	s := newOnDemandServer(client, storeWith(t, client), nil)
+	warmUp(t, s, client)
+
+	r := client.recipes["R1"]
+	r.Name = "Pasta met prei v2"
+	client.recipes["R1"] = r
+
+	out, isErr := callTool(t, s.deleteRecipe, map[string]interface{}{"uid": "R1"})
+	assert.True(t, isErr)
+	assert.Equal(t, conflictMessage, out)
+	assert.Empty(t, client.savedRecipe)
+}
+
+func TestDeleteRecipeUnknownUID(t *testing.T) {
+	client := newFakeAccount()
+	s := newOnDemandServer(client, storeWith(t, client), nil)
+	warmUp(t, s, client)
+
+	req := mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: map[string]interface{}{"uid": "NOPE"}}}
+	_, err := s.deleteRecipe(context.Background(), req)
+	assert.Error(t, err)
+	assert.Empty(t, client.savedRecipe)
 }

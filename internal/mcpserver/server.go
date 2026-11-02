@@ -142,6 +142,10 @@ func (s *Server) tools() []server.ServerTool {
 		mcp.WithString("source_url", mcp.Description("The URL the recipe comes from")),
 		mcp.WithArray("categories", mcp.Description("Replaces the recipe's categories with these existing category names. Unknown names are rejected."), mcp.Items(map[string]interface{}{"type": "string"})),
 	)
+	deleteRecipeTool := mcp.NewTool("delete_paprika_recipe",
+		mcp.WithDescription("Move a recipe to the Paprika trash. It can be restored in the Paprika app until the trash is emptied."),
+		mcp.WithString("uid", mcp.Description("The UID of the recipe"), mcp.Required()),
+	)
 	searchRecipesTool := mcp.NewTool("search_recipes",
 		mcp.WithDescription("Search Paprika recipes by name, ingredient and/or category. All given filters must match. A category filter includes its subcategories. Returns name, categories and uid per recipe."),
 		mcp.WithString("query", mcp.Description("Text that must appear in the recipe name")),
@@ -176,6 +180,7 @@ func (s *Server) tools() []server.ServerTool {
 	tools := []server.ServerTool{
 		{Tool: createRecipeTool, Handler: s.createRecipe},
 		{Tool: updateRecipeTool, Handler: s.updateRecipe},
+		{Tool: deleteRecipeTool, Handler: s.deleteRecipe},
 		{Tool: searchRecipesTool, Handler: s.searchRecipes},
 		{Tool: getRecipeTool, Handler: s.getRecipe},
 		{Tool: listCategoriesTool, Handler: s.listCategories},
@@ -376,6 +381,46 @@ func (s *Server) updateRecipe(ctx context.Context, req mcp.CallToolRequest) (*mc
 	s.logger.Info("Updated recipe", "name", recipe.Name, "uid", recipe.UID, "duration", duration)
 
 	return s.recipeResult(*recipe, categories), nil
+}
+
+func (s *Server) deleteRecipe(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	uid, ok := req.GetArguments()["uid"].(string)
+	if !ok || len(uid) == 0 {
+		return nil, errors.New("uid is required")
+	}
+
+	readCtx, cancel := context.WithTimeout(ctx, readTimeout)
+	defer cancel()
+	if err := s.cache.ensureFresh(readCtx, cacheMaxAge); err != nil {
+		return nil, err
+	}
+
+	ctx, cancel = context.WithTimeout(ctx, writeTimeout)
+	defer cancel()
+	recipe, err := s.paprika3.GetRecipe(ctx, uid)
+	if err != nil {
+		return nil, err
+	}
+	if recipe.InTrash {
+		return mcp.NewToolResultError("This recipe is already in the Paprika trash."), nil
+	}
+	if s.cache.onDemand {
+		if result, err := s.checkRecipeConflict(ctx, *recipe); result != nil || err != nil {
+			return result, err
+		}
+	}
+
+	recipe.InTrash = true
+	recipe, err = s.paprika3.SaveRecipe(ctx, *recipe)
+	if err != nil {
+		return nil, err
+	}
+	s.cache.put(*recipe)
+	s.cache.saveStore(ctx)
+	s.server.DeleteResources(fmt.Sprintf("paprika://recipes/%s", recipe.UID))
+
+	s.logger.Info("Moved recipe to trash", "name", recipe.Name, "uid", recipe.UID)
+	return mcp.NewToolResultText(fmt.Sprintf("Moved %q (%s) to the Paprika trash. Restore it in the Paprika app if needed.", recipe.Name, recipe.UID)), nil
 }
 
 // recipeResult returns a saved recipe as markdown, with its uid and category names

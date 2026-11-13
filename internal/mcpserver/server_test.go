@@ -367,11 +367,55 @@ func TestCreateRecipe(t *testing.T) {
 		assert.Contains(t, out, "never created")
 		assert.Empty(t, client.savedRecipe)
 	})
+
+	t.Run("total time is saved", func(t *testing.T) {
+		client := newFakeAccount()
+		s := newTestServer(client)
+
+		out, isErr := callTool(t, s.createRecipe, map[string]interface{}{"name": "Stoofvlees", "ingredients": "vlees", "directions": "stoven", "total_time": "45 min"})
+		assert.False(t, isErr)
+		require.Len(t, client.savedRecipe, 1)
+		assert.Equal(t, "45 min", client.savedRecipe[0].TotalTime)
+		assert.Contains(t, out, "- **Total Time:** 45 min")
+	})
+}
+
+func TestRecipeToolsAcceptTotalTime(t *testing.T) {
+	s := newTestServer(newFakeAccount())
+	checked := 0
+	for _, tool := range s.tools() {
+		if tool.Tool.Name == "create_paprika_recipe" || tool.Tool.Name == "update_paprika_recipe" {
+			checked++
+			assert.Contains(t, tool.Tool.InputSchema.Properties, "total_time", tool.Tool.Name)
+		}
+	}
+	assert.Equal(t, 2, checked)
+}
+
+func TestUpdateRecipeTotalTime(t *testing.T) {
+	for _, tc := range []struct{ name, arg, want string }{
+		{"replaces", "50 min", "50 min"},
+		{"empty string clears", "", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client := newFakeAccount()
+			r := client.recipes["R1"]
+			r.TotalTime = "1 hr"
+			client.recipes["R1"] = r
+			s := newTestServer(client)
+
+			_, isErr := callTool(t, s.updateRecipe, map[string]interface{}{"uid": "R1", "total_time": tc.arg})
+			assert.False(t, isErr)
+			require.Len(t, client.savedRecipe, 1)
+			assert.Equal(t, tc.want, client.savedRecipe[0].TotalTime)
+		})
+	}
 }
 
 func TestUpdateRecipeKeepsExistingFields(t *testing.T) {
 	client := newFakeAccount()
 	r := client.recipes["R1"]
+	r.TotalTime = "1 hr"
 	r.Rating = 5
 	photo := "photo.jpg"
 	r.Photo = &photo
@@ -390,6 +434,7 @@ func TestUpdateRecipeKeepsExistingFields(t *testing.T) {
 	assert.Equal(t, 5, saved.Rating)
 	assert.Equal(t, &photo, saved.Photo)
 	assert.Equal(t, "2020-01-01 10:00:00", saved.Created)
+	assert.Equal(t, "1 hr", saved.TotalTime)
 }
 
 func TestRecipeCacheOnlyFetchesChangedRecipes(t *testing.T) {

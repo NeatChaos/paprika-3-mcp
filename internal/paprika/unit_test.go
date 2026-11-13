@@ -354,6 +354,14 @@ func TestToMarkdownNumbersDirectionSteps(t *testing.T) {
 	assert.Contains(t, r.ToMarkdown(), "## Directions\n1. Chop.\n2. Boil.\n3. Serve.\n")
 }
 
+func TestToMarkdownShowsTotalTime(t *testing.T) {
+	r := Recipe{Name: "Stew", PrepTime: "15 min", CookTime: "2 hr", TotalTime: "2 hr 30 min"}
+	assert.Contains(t, r.ToMarkdown(), "- **Cook Time:** 2 hr\n- **Total Time:** 2 hr 30 min\n")
+
+	onlyTotal := Recipe{Name: "Bread", TotalTime: "4 hr"}
+	assert.Contains(t, onlyTotal.ToMarkdown(), "## Details\n- **Total Time:** 4 hr\n")
+}
+
 func keysOf(m map[string]interface{}) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {

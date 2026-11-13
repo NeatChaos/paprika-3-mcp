@@ -263,7 +263,7 @@ func (r *Recipe) ToMarkdown() string {
 		fmt.Fprintf(&sb, "_%s_\n\n", r.Description)
 	}
 
-	if r.Servings != "" || r.PrepTime != "" || r.CookTime != "" || r.Difficulty != "" {
+	if r.Servings != "" || r.PrepTime != "" || r.CookTime != "" || r.TotalTime != "" || r.Difficulty != "" {
 		sb.WriteString("## Details\n")
 		if r.Servings != "" {
 			fmt.Fprintf(&sb, "- **Servings:** %s\n", r.Servings)
@@ -273,6 +273,9 @@ func (r *Recipe) ToMarkdown() string {
 		}
 		if r.CookTime != "" {
 			fmt.Fprintf(&sb, "- **Cook Time:** %s\n", r.CookTime)
+		}
+		if r.TotalTime != "" {
+			fmt.Fprintf(&sb, "- **Total Time:** %s\n", r.TotalTime)
 		}
 		if r.Difficulty != "" {
 			fmt.Fprintf(&sb, "- **Difficulty:** %s\n", r.Difficulty)
